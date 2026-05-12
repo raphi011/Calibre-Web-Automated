@@ -277,9 +277,16 @@ def HandleSyncRequest():
         # Multi-device fix: same notin_(KoboSyncedBooks) removal as above —
         # the full-library sync mode had the same multi-device break. The
         # per-device sync token cursor handles "what's new per device".
+        #
+        # Without the last_modified > sync_token.books_last_modified filter
+        # this branch returned every book on every sync (no per-device
+        # throttle other than the now-removed notin_), which kept
+        # cont_sync True forever and looped the device through the entire
+        # library on each sync round.
         changed_entries = (changed_entries
                            .join(db.Data).outerjoin(ub.ArchivedBook, and_(db.Books.id == ub.ArchivedBook.book_id,
                                                                           ub.ArchivedBook.user_id == current_user.id))
+                           .filter(db.Books.last_modified > sync_token.books_last_modified)
                            .filter(calibre_db.common_filters(allow_show_archived=True))
                            .filter(db.Data.format.in_(KOBO_FORMATS))
                            .order_by(db.Books.last_modified)
