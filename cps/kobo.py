@@ -237,11 +237,15 @@ def HandleSyncRequest():
                                                    ub.ArchivedBook.last_modified,
                                                    ub.BookShelf.date_added,
                                                    ub.ArchivedBook.is_archived)
+        # Multi-device fix: removed `.filter(notin_(KoboSyncedBooks))` here.
+        # The user-level "already synced" filter prevented additional devices
+        # on the same user from ever receiving NewEntitlement for books a
+        # different device had already synced. Per the Kobo protocol, the
+        # per-device `x-kobo-synctoken` cursor (last_modified comparisons
+        # below) is the correct mechanism for "what's new for this device".
         changed_entries = (changed_entries
                            .join(db.Data).outerjoin(ub.ArchivedBook, and_(db.Books.id == ub.ArchivedBook.book_id,
                                                                           ub.ArchivedBook.user_id == current_user.id))
-                           .filter(db.Books.id.notin_(calibre_db.session.query(ub.KoboSyncedBooks.book_id)
-                                                      .filter(ub.KoboSyncedBooks.user_id == current_user.id)))
                           .filter(or_(
                               ub.BookShelf.date_added > sync_token.books_last_modified,
                               db.Books.last_modified > sync_token.books_last_modified,
@@ -262,11 +266,12 @@ def HandleSyncRequest():
         changed_entries = calibre_db.session.query(db.Books,
                                                    ub.ArchivedBook.last_modified,
                                                    ub.ArchivedBook.is_archived)
+        # Multi-device fix: same notin_(KoboSyncedBooks) removal as above —
+        # the full-library sync mode had the same multi-device break. The
+        # per-device sync token cursor handles "what's new per device".
         changed_entries = (changed_entries
                            .join(db.Data).outerjoin(ub.ArchivedBook, and_(db.Books.id == ub.ArchivedBook.book_id,
                                                                           ub.ArchivedBook.user_id == current_user.id))
-                           .filter(db.Books.id.notin_(calibre_db.session.query(ub.KoboSyncedBooks.book_id)
-                                                      .filter(ub.KoboSyncedBooks.user_id == current_user.id)))
                            .filter(calibre_db.common_filters(allow_show_archived=True))
                            .filter(db.Data.format.in_(KOBO_FORMATS))
                            .order_by(db.Books.last_modified)
