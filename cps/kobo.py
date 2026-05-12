@@ -243,13 +243,21 @@ def HandleSyncRequest():
         # different device had already synced. Per the Kobo protocol, the
         # per-device `x-kobo-synctoken` cursor (last_modified comparisons
         # below) is the correct mechanism for "what's new for this device".
+        #
+        # NOTE: the magic-shelf branch of the inner OR was also removed —
+        # it bypassed the timestamp cursor entirely, which combined with
+        # the notin_ removal caused magic-shelf books to re-emit on every
+        # paginated request forever (cont_sync == True loop). Magic-shelf
+        # membership is enforced in the OUTER filter below (kobo_sync shelf
+        # OR magic-shelf membership), which is correct for "what's in scope";
+        # the inner filter is for "what changed", which the timestamp cursor
+        # handles correctly per-device.
         changed_entries = (changed_entries
                            .join(db.Data).outerjoin(ub.ArchivedBook, and_(db.Books.id == ub.ArchivedBook.book_id,
                                                                           ub.ArchivedBook.user_id == current_user.id))
                           .filter(or_(
                               ub.BookShelf.date_added > sync_token.books_last_modified,
-                              db.Books.last_modified > sync_token.books_last_modified,
-                              db.Books.id.in_(magic_shelf_book_ids) if magic_shelf_book_ids else False
+                              db.Books.last_modified > sync_token.books_last_modified
                           ))
                            .filter(db.Data.format.in_(KOBO_FORMATS))
                            .filter(calibre_db.common_filters(allow_show_archived=True))
